@@ -1,0 +1,14 @@
+version: "3"
+
+dotenv: [".env.{{.ENV}}", .env]
+
+includes:
+  docker: .project/taskfiles/docker.dist.yaml
+
+tasks:
+  ########################
+  # System Generic
+  ########################
+  start:
+    cmds:
+      - task: docker:project-start

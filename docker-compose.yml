@@ -1,0 +1,90 @@
+name: ${INSTANCE_NAME:-wiki}
+services:
+  outline:
+    image: docker.getoutline.com/outlinewiki/outline:0.86
+    env_file: ./.env
+    expose:
+      - 3000
+    volumes:
+      - storage-data:/var/lib/outline/data
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@postgres:5432/outline
+
+  redis:
+    image: redis:8
+    expose:
+      - "6379"
+    volumes:
+      - ./redis.conf:/redis.conf
+    command: ["redis-server", "/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 3
+
+  postgres:
+    image: postgres:16
+    expose:
+      - "5432"
+    volumes:
+      - database-data:/var/lib/postgresql/data
+      - ./.project/scripts/postgresql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "outline", "-U", "${DB_USER}"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_MULTIPLE_DATABASES: keycloak, outline
+
+  https-portal:
+    image: steveltn/https-portal
+    ports:
+      - "80:80"
+      - "443:443"
+    # restart: always
+    volumes:
+      - https-portal-data:/var/lib/https-portal
+    healthcheck:
+      test: ["CMD", "service", "nginx", "status"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    environment:
+      DOMAINS: "${DOMAIN} -> http://outline:3000, ${OAUTH_DOMAIN} -> http://keycloak:8080"
+      # STAGE: "production"
+      STAGE: "local"
+      WEBSOCKET: "true"
+      CLIENT_MAX_BODY_SIZE: "0"
+
+  keycloak:
+    image: keycloak/keycloak:26.3
+    expose:
+      - "8080"
+    command: start-dev
+    volumes:
+      - keycloak-data:/data
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${DB_USER}
+      KC_DB_PASSWORD: ${DB_PASSWORD}
+      KC_DB_SCHEMA: public
+      KC_HOSTNAME_DEBUG: true
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: ${OAUTH_URL}
+    depends_on:
+      - postgres
+
+volumes:
+  https-portal-data:
+  storage-data:
+  database-data:
+  keycloak-data:

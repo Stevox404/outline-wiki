@@ -1,0 +1,86 @@
+version: "3"
+
+tasks:
+  ####################################
+  # Docker - start/stop
+  ####################################
+  project-start:
+    cmds:
+      - task: wiki-start
+    status:
+      - test -z "$(command -v docker)"
+  project-stop:
+    cmds:
+      - task: wiki-stop
+    status:
+      - test -z "$(command -v docker)"
+
+  ####################################
+  # App Docker tasks
+  ####################################
+  wiki-start:
+    cmds:
+      - task: start
+  wiki-update:
+    cmds:
+      - task: destroy
+      - task: app-start
+  wiki-stop:
+    cmds:
+      - task: stop
+  wiki-restart:
+    cmds:
+      - task: restart
+  wiki-logs:
+    cmds:
+      - task: logs
+  wiki-logs-internal:
+    vars:
+      CTR_ID:
+        sh: docker ps -aqf "name={{ .PROJECT_NAME }}-app-main" | head -n 1
+    cmds:
+      - docker exec -it {{.CTR_ID}} tail -n1000 -f storage/logs/laravel.log
+
+  ####################################
+  # Docker tasks
+  ####################################
+  start:
+    cmds:
+      - docker compose $( [ -f ./docker-compose.override.yaml ] && echo "-f ./docker-compose.override.yaml" ) up -d --wait
+  stop:
+    cmds:
+      - docker compose $( [ -f ./docker-compose.override.yaml ] && echo "-f ./docker-compose.override.yaml" ) stop
+  restart:
+    cmds:
+      - docker compose restart
+  logs:
+    cmds:
+      - docker compose logs -f -n 1000
+  destroy:
+    cmds:
+      - docker compose down
+  purge:
+    cmds:
+      - docker compose down -v
+  bash:
+    # task docker:bash -- wiki-outline
+    vars:
+      CTR_ID:
+        sh: docker ps -aqf "name={{.CLI_ARGS}}" | head -n 1
+    cmds:
+      - docker ps -f "id={{.CTR_ID}}" --format {{`"{{.ID}}":" {{.Names}}"`}}
+      - docker exec -it {{.CTR_ID}} /bin/bash
+    preconditions:
+      - test -n "$(docker ps -aqf 'name={{.CLI_ARGS}}' | head -n 1)"
+
+  compose-logs:
+    private: true
+    cmds:
+      - docker compose logs -n 1000
+  container-logs:
+    private: true
+    vars:
+      CTR_ID:
+        sh: docker ps -aqf "name={{.CLI_ARGS}}" | head -n 1
+    cmds:
+      - docker compose logs -f {{.CTR_ID}} -n 1000
